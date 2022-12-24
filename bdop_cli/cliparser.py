@@ -30,27 +30,9 @@ def __create_parser() -> ArgumentParser:
     parser = ArgumentParser(prog="bdop-cli", description="bdop-cli")
     subparsers = parser.add_subparsers(title="commands", dest="command")
     subparsers.add_parser(
-        "deploy", help="Trigger a new deployment by changing YAML values", parents=[__create_deploy_parser()]
-    )
-    subparsers.add_parser(
         "sync-apps",
         help="Synchronize applications (= every directory) from apps config repository to apps root config",
         parents=[__create_sync_apps_parser()],
-    )
-    subparsers.add_parser(
-        "add-pr-comment", help="Create a comment on the pull request", parents=[__create_add_pr_comment_parser()]
-    )
-    subparsers.add_parser(
-        "create-preview", help="Create a preview environment", parents=[__create_create_preview_parser()]
-    )
-    subparsers.add_parser(
-        "create-pr-preview", help="Create a preview environment", parents=[__create_create_pr_preview_parser()]
-    )
-    subparsers.add_parser(
-        "delete-preview", help="Delete a preview environment", parents=[__create_delete_preview_parser()]
-    )
-    subparsers.add_parser(
-        "delete-pr-preview", help="Delete a pr preview environment", parents=[__create_delete_pr_preview_parser()]
     )
     subparsers.add_parser("version", help="Show the bdop-cli version information", parents=[__create_version_parser()])
     return parser
@@ -119,67 +101,6 @@ def __create_sync_apps_parser() -> ArgumentParser:
     parser.add_argument("--root-repository-name", help="Root config repository name", required=True)
     return parser
 
-
-def __create_add_pr_comment_parser() -> ArgumentParser:
-    parser = ArgumentParser(add_help=False)
-    __add_git_credentials_args(parser)
-    __add_git_org_and_repo_args(parser)
-    __add_git_provider_args(parser)
-    __add_pr_id_arg(parser)
-    __add_parent_id_arg(parser)
-    __add_verbose_arg(parser)
-    parser.add_argument("--text", help="the text of the comment", required=True)
-    return parser
-
-
-def __create_create_preview_parser() -> ArgumentParser:
-    parser = ArgumentParser(add_help=False)
-    __add_git_credentials_args(parser)
-    __add_git_commit_user_args(parser)
-    __add_git_org_and_repo_args(parser)
-    __add_git_provider_args(parser)
-    parser.add_argument("--git-hash", help="the git hash which should be deployed", type=str, required=True)
-    __add_preview_id_arg(parser)
-    __add_verbose_arg(parser)
-    return parser
-
-
-def __create_create_pr_preview_parser() -> ArgumentParser:
-    parser = ArgumentParser(add_help=False)
-    __add_git_credentials_args(parser)
-    __add_git_commit_user_args(parser)
-    __add_git_org_and_repo_args(parser)
-    __add_git_provider_args(parser)
-    __add_pr_id_arg(parser)
-    __add_parent_id_arg(parser)
-    __add_verbose_arg(parser)
-    return parser
-
-
-def __create_delete_preview_parser() -> ArgumentParser:
-    parser = ArgumentParser(add_help=False)
-    __add_git_credentials_args(parser)
-    __add_git_commit_user_args(parser)
-    __add_git_org_and_repo_args(parser)
-    __add_git_provider_args(parser)
-    __add_preview_id_arg(parser)
-    __add_expect_preview_exists_arg(parser)
-    __add_verbose_arg(parser)
-    return parser
-
-
-def __create_delete_pr_preview_parser() -> ArgumentParser:
-    parser = ArgumentParser(add_help=False)
-    __add_git_credentials_args(parser)
-    __add_git_commit_user_args(parser)
-    __add_git_org_and_repo_args(parser)
-    __add_git_provider_args(parser)
-    parser.add_argument("--branch", help="The branch for which the preview was created for", required=True)
-    __add_expect_preview_exists_arg(parser)
-    __add_verbose_arg(parser)
-    return parser
-
-
 def __create_version_parser() -> ArgumentParser:
     return ArgumentParser(add_help=False)
 
@@ -212,29 +133,6 @@ def __add_git_org_and_repo_args(deploy_p: ArgumentParser) -> None:
 def __add_git_provider_args(deploy_p: ArgumentParser) -> None:
     deploy_p.add_argument("--git-provider", help="Git server provider", type=__parse_git_provider)
     deploy_p.add_argument("--git-provider-url", help="Git provider base API URL (e.g. https://bitbucket.example.tld)")
-
-
-def __add_pr_id_arg(parser: ArgumentParser) -> None:
-    parser.add_argument("--pr-id", help="the id of the pull request", type=int, required=True)
-
-
-def __add_parent_id_arg(parser: ArgumentParser) -> None:
-    parser.add_argument("--parent-id", help="the id of the parent comment, in case of a reply", type=int)
-
-
-def __add_preview_id_arg(parser: ArgumentParser) -> None:
-    parser.add_argument("--preview-id", help="The user-defined preview ID", type=str, required=True)
-
-
-def __add_expect_preview_exists_arg(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "--expect-preview-exists",
-        help="Fail if preview does not exist",
-        type=__parse_bool,
-        nargs="?",
-        const=True,
-        default=False,
-    )
 
 
 def __add_verbose_arg(parser: ArgumentParser) -> None:
