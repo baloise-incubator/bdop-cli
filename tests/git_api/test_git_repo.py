@@ -1,0 +1,327 @@
+from os import path, makedirs, chmod
+import stat
+import unittest
+import uuid
+from unittest.mock import MagicMock, patch
+from git import Repo
+import pytest
+
+from bdop_cli.git_api import GitRepo, GitRepoApi
+from bdop_cli.gitops_exception import GitOpsException
+
+
+class GitRepoTest(unittest.TestCase):
+    def setUp(self):
+        self.__origin = self.__create_origin()
+
+        self.__mock_repo_api: GitRepoApi = MagicMock()
+        self.__mock_repo_api.get_clone_url.return_value = self.__origin.working_dir
+        self.__mock_repo_api.get_username.return_value = None
+        self.__mock_repo_api.get_password.return_value = None
+
+    def __create_tmp_dir(self):
+        tmp_dir_path = f"/tmp/bdop_cli-test-{uuid.uuid4()}"
+        makedirs(tmp_dir_path)
+        return tmp_dir_path
+
+    def __read_file(self, filename):
+        self.assertTrue(filename)
+        with open(filename) as input_stream:
+            return input_stream.read()
+
+    def __create_origin(self):
+        repo_dir = self.__create_tmp_dir()
+
+        repo = Repo.init(repo_dir)
+        git_user = "unit tester"
+        git_email = "unit@tester.com"
+        repo.config_writer().set_value("user", "name", git_user).release()
+        repo.config_writer().set_value("user", "email", git_email).release()
+
+        with open(f"{repo_dir}/README.md", "w") as readme:
+            readme.write("master branch readme")
+        repo.git.add("--all")
+        repo.git.commit("-m", "initial commit", "--author", f"{git_user} <{git_email}>")
+
+        repo.create_head("xyz").checkout()
+
+        with open(f"{repo_dir}/README.md", "w") as readme:
+            readme.write("xyz branch readme")
+        repo.git.add("--all")
+        repo.git.commit("-m", "xyz brach commit", "--author", f"{git_user} <{git_email}>")
+
+        repo.git.checkout("master")  # master = default branch
+        repo.git.config("receive.denyCurrentBranch", "ignore")
+
+        return repo
+
+    def test_finalize(self):
+        testee = GitRepo(self.__mock_repo_api)
+
+        testee.clone()
+
+        tmp_dir = testee.get_full_file_path("..")
+        self.assertTrue(path.exists(tmp_dir))
+
+        testee.finalize()
+        self.assertFalse(path.exists(tmp_dir))
+
+    def test_enter_and_exit_magic_methods(self):
+        testee = GitRepo(self.__mock_repo_api)
+
+        self.assertEqual(testee, testee.__enter__())
+
+        testee.clone()
+
+        tmp_dir = testee.get_full_file_path("..")
+        self.assertTrue(path.exists(tmp_dir))
+
+        testee.__exit__(None, None, None)
+        self.assertFalse(path.exists(tmp_dir))
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_clone(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+
+            tmp_dir = testee.get_full_file_path("..")
+            self.assertTrue(path.exists(tmp_dir))
+
+            readme = self.__read_file(testee.get_full_file_path("README.md"))
+            self.assertEqual("master branch readme", readme)
+
+        self.assertFalse(path.exists(tmp_dir))
+        logging_mock.info.assert_called_once_with("Cloning repository: %s", self.__mock_repo_api.get_clone_url())
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_clone_branch(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone("xyz")
+
+            tmp_dir = testee.get_full_file_path("..")
+            self.assertTrue(path.exists(tmp_dir))
+
+            readme = self.__read_file(testee.get_full_file_path("README.md"))
+            self.assertEqual("xyz branch readme", readme)
+
+        self.assertFalse(path.exists(tmp_dir))
+        logging_mock.info.assert_called_once_with(
+            "Cloning repository: %s (branch: %s)",
+            self.__mock_repo_api.get_clone_url(),
+            "xyz",
+        )
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_clone_unknown_branch(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            with pytest.raises(GitOpsException) as ex:
+                testee.clone("unknown")
+            self.assertEqual(
+                f"Error cloning branch 'unknown' of '{self.__mock_repo_api.get_clone_url()}'",
+                str(ex.value),
+            )
+
+        logging_mock.info.assert_called_once_with(
+            "Cloning repository: %s (branch: %s)",
+            self.__mock_repo_api.get_clone_url(),
+            "unknown",
+        )
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_clone_without_credentials(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+
+            readme = self.__read_file(testee.get_full_file_path("README.md"))
+            self.assertEqual("master branch readme", readme)
+
+            self.assertFalse(path.exists(testee.get_full_file_path("../credentials.sh")))
+        logging_mock.info.assert_called_once_with("Cloning repository: %s", self.__mock_repo_api.get_clone_url())
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_clone_with_credentials(self, logging_mock):
+        self.__mock_repo_api.get_username.return_value = "User"
+        self.__mock_repo_api.get_password.return_value = "Pass"
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+
+            credentials_file = self.__read_file(testee.get_full_file_path("../credentials.sh"))
+            self.assertEqual(
+                """\
+#!/bin/sh
+echo username='User'
+echo password='Pass'
+""",
+                credentials_file,
+            )
+        logging_mock.info.assert_called_once_with("Cloning repository: %s", self.__mock_repo_api.get_clone_url())
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_clone_unknown_url(self, logging_mock):
+        self.__mock_repo_api.get_clone_url.return_value = "invalid_url"
+        with GitRepo(self.__mock_repo_api) as testee:
+            with pytest.raises(GitOpsException) as ex:
+                testee.clone()
+            self.assertEqual("Error cloning 'invalid_url'", str(ex.value))
+        logging_mock.info.assert_called_once_with("Cloning repository: %s", self.__mock_repo_api.get_clone_url())
+
+    def test_get_full_file_path(self):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            self.assertRegex(
+                testee.get_full_file_path("foo.bar"),
+                r"^/tmp/bdop-cli/[0-9a-f\-]+/repo/foo\.bar$",
+            )
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_new_branch(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            logging_mock.reset_mock()
+
+            testee.new_branch("foo")
+
+            repo = Repo(testee.get_full_file_path("."))
+            branches = [str(b) for b in repo.branches]
+            self.assertIn("foo", branches)
+        logging_mock.info.assert_called_once_with("Creating new branch: %s", "foo")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_new_branch_name_collision(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            logging_mock.reset_mock()
+
+            with pytest.raises(GitOpsException) as ex:
+                testee.new_branch("master")
+            self.assertEqual("Error creating new branch 'master'.", str(ex.value))
+        logging_mock.info.assert_called_once_with("Creating new branch: %s", "master")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_commit(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            logging_mock.reset_mock()
+
+            with open(testee.get_full_file_path("foo.md"), "w") as outfile:
+                outfile.write("new file")
+            with open(testee.get_full_file_path("README.md"), "w") as outfile:
+                outfile.write("new content")
+
+            commit_hash = testee.commit(git_user="john doe", git_email="john@doe.com", message="new commit")
+            repo = Repo(testee.get_full_file_path("."))
+            commits = list(repo.iter_commits("master"))
+
+            self.assertIsNotNone(commit_hash)
+            self.assertRegex(commit_hash, "^[a-f0-9]{40}$", "Not a long commit hash")
+            self.assertEqual(2, len(commits))
+            self.assertEqual("new commit\n", commits[0].message)
+            self.assertEqual("john doe", commits[0].author.name)
+            self.assertEqual("john@doe.com", commits[0].author.email)
+            self.assertIn("foo.md", commits[0].stats.files)
+            self.assertIn("README.md", commits[0].stats.files)
+        logging_mock.info.assert_called_once_with("Creating commit with message: %s", "new commit")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_commit_nothing_to_commit(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            logging_mock.reset_mock()
+
+            commit_hash = testee.commit(git_user="john doe", git_email="john@doe.com", message="empty commit")
+            repo = Repo(testee.get_full_file_path("."))
+            commits = list(repo.iter_commits("master"))
+
+            self.assertIsNone(commit_hash)
+            self.assertEqual(1, len(commits))
+            self.assertEqual("initial commit\n", commits[0].message)
+        logging_mock.assert_not_called()
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_push(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+
+            with open(testee.get_full_file_path("foo.md"), "w") as readme:
+                readme.write("new file")
+            util_repo = Repo(testee.get_full_file_path("."))
+            util_repo.git.add("--all")
+            util_repo.config_writer().set_value("user", "email", "unit@tester.com").release()
+            util_repo.git.commit("-m", "new commit")
+
+            logging_mock.reset_mock()
+
+            testee.push("master")
+
+            commits = list(self.__origin.iter_commits("master"))
+            self.assertEqual(2, len(commits))
+            self.assertEqual("new commit\n", commits[0].message)
+        logging_mock.info.assert_called_once_with("Pushing branch: %s", "master")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_push_no_changes(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            logging_mock.reset_mock()
+
+            testee.push("master")
+        logging_mock.info.assert_called_once_with("Pushing branch: %s", "master")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_push_current_branch(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            testee.new_branch("foo")
+            logging_mock.reset_mock()
+
+            testee.push()  # current branch
+        logging_mock.info.assert_called_once_with("Pushing branch: %s", "foo")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_push_unknown_branch(self, logging_mock):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            logging_mock.reset_mock()
+
+            with pytest.raises(GitOpsException) as ex:
+                testee.push("unknown")
+            assert str(ex.value).startswith("Error pushing branch 'unknown' to origin")
+        logging_mock.info.assert_called_once_with("Pushing branch: %s", "unknown")
+
+    @patch("bdop_cli.git_api.git_repo.logging")
+    def test_push_commit_hook_error_reason_is_shown(self, logging_mock):
+        repo_dir = self.__origin.working_dir
+        with open(f"{repo_dir}/.git/hooks/pre-receive", "w") as pre_receive_hook:
+            pre_receive_hook.write('echo >&2 "we reject this push"; exit 1')
+        chmod(
+            f"{repo_dir}/.git/hooks/pre-receive",
+            stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR,
+        )
+
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+
+            with open(testee.get_full_file_path("foo.md"), "w") as readme:
+                readme.write("new file")
+            util_repo = Repo(testee.get_full_file_path("."))
+            util_repo.git.add("--all")
+            util_repo.config_writer().set_value("user", "email", "unit@tester.com").release()
+            util_repo.git.commit("-m", "new commit")
+
+            logging_mock.reset_mock()
+
+            with pytest.raises(GitOpsException) as ex:
+                testee.push("master")
+            assert "pre-receive" in str(ex.value) and "we reject this push" in str(ex.value)
+        logging_mock.info.assert_called_once_with("Pushing branch: %s", "master")
+
+    def test_get_author_from_last_commit(self):
+        with GitRepo(self.__mock_repo_api) as testee:
+            testee.clone()
+            self.assertEqual("unit tester <unit@tester.com>", testee.get_author_from_last_commit())
+
+    def test_get_author_from_last_commit_not_cloned_yet(self):
+        with GitRepo(self.__mock_repo_api) as testee:
+            with pytest.raises(GitOpsException) as ex:
+                testee.get_author_from_last_commit()
+        self.assertEqual("Repository not cloned yet!", str(ex.value))

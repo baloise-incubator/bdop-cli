@@ -1,0 +1,14 @@
+*
+!docs
+!bdop_cli/
+!tests/
+!.pylintrc
+!CONTRIBUTING.md
+!mkdocs.yml
+!Makefile
+!mypy.ini
+!requirements-docs.txt
+!requirements-test.txt
+!setup.py
+
+**/__pycache__/

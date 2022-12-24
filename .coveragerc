@@ -1,0 +1,7 @@
+[run]
+source = bdop_cli
+
+[report]
+exclude_lines =
+    pragma: no cover
+    @abstractmethod
