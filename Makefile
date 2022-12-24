@@ -27,6 +27,6 @@ coverage:
 checks: format-check lint mypy test
 
 image:
-	DOCKER_BUILDKIT=1 docker build --progress=plain -t bdop-cli:latest .
+	DOCKER_BUILDKIT=1 docker build --progress=plain -t registry.baloise.dev/bdop-cli:latest .
 
 .PHONY: init format format-check lint mypy test coverage checks image

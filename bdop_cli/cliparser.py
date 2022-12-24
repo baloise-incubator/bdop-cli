@@ -101,6 +101,7 @@ def __create_sync_apps_parser() -> ArgumentParser:
     parser.add_argument("--root-repository-name", help="Root config repository name", required=True)
     return parser
 
+
 def __create_version_parser() -> ArgumentParser:
     return ArgumentParser(add_help=False)
 

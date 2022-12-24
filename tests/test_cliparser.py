@@ -75,8 +75,11 @@ class CliParserTest(unittest.TestCase):
         exit_code, stdout, stderr = self._capture_parse_args(["sync-apps"])
         self.assertEqual(exit_code, 2)
         self.assertEqual("", stdout)
-        self.assertIn("bdop-cli sync-apps: error: the following arguments are required: --username, --password, "
-                      "--organisation, --repository-name, --root-organisation, --root-repository-name", stderr)
+        self.assertIn(
+            "bdop-cli sync-apps: error: the following arguments are required: --username, --password, "
+            "--organisation, --repository-name, --root-organisation, --root-repository-name",
+            stderr,
+        )
 
     def test_sync_apps_help(self):
         exit_code, stdout, stderr = self._capture_parse_args(["sync-apps", "--help"])
@@ -182,100 +185,10 @@ class CliParserTest(unittest.TestCase):
         self.assertIn("usage: bdop-cli version", stdout)
         self.assertEqual("", stderr)
 
-    def test_invalid_boolean(self):
-        exit_code, stdout, stderr = self._capture_parse_args(
-            [
-                "add-pr-comment",
-                "--git-provider",
-                "github",
-                "--username",
-                "x",
-                "--password",
-                "x",
-                "--organisation",
-                "x",
-                "--repository-name",
-                "x",
-                "--pr-id",
-                "1",
-                "--text",
-                "x",
-                "--verbose",
-                "INVALID_BOOL",
-            ]
-        )
-        self.assertEqual(exit_code, 2)
-        self.assertEqual("", stdout)
-        last_stderr_line = stderr.splitlines()[-1]
-        self.assertEqual(
-            "bdop-cli add-pr-comment: error: argument -v/--verbose: invalid bool value: 'INVALID_BOOL'",
-            last_stderr_line,
-        )
-
-    def test_invalid_int(self):
-        exit_code, stdout, stderr = self._capture_parse_args(
-            [
-                "add-pr-comment",
-                "--git-provider",
-                "github",
-                "--username",
-                "x",
-                "--password",
-                "x",
-                "--organisation",
-                "x",
-                "--repository-name",
-                "x",
-                "--pr-id",
-                "INVALID_INT",
-                "--text",
-                "x",
-                "--verbose",
-                "y",
-            ]
-        )
-        self.assertEqual(exit_code, 2)
-        self.assertEqual("", stdout)
-        last_stderr_line = stderr.splitlines()[-1]
-        self.assertEqual(
-            "bdop-cli add-pr-comment: error: argument --pr-id: invalid int value: 'INVALID_INT'", last_stderr_line
-        )
-
-    def test_invalid_yaml(self):
-        exit_code, stdout, stderr = self._capture_parse_args(
-            [
-                "deploy",
-                "--git-provider",
-                "github",
-                "--username",
-                "x",
-                "--password",
-                "x",
-                "--organisation",
-                "x",
-                "--repository-name",
-                "x",
-                "--git-user",
-                "x",
-                "--git-email",
-                "x",
-                "--file",
-                "x",
-                "--values",
-                "{ INVALID YAML",
-            ]
-        )
-        self.assertEqual(exit_code, 2)
-        self.assertEqual("", stdout)
-        last_stderr_line = stderr.splitlines()[-1]
-        self.assertEqual(
-            "bdop-cli deploy: error: argument --values: invalid YAML value: '{ INVALID YAML'", last_stderr_line
-        )
-
     def test_invalid_git_provider(self):
         exit_code, stdout, stderr = self._capture_parse_args(
             [
-                "add-pr-comment",
+                "sync-apps",
                 "--git-provider",
                 "INVALID_PROVIDER",
                 "--username",
@@ -286,9 +199,9 @@ class CliParserTest(unittest.TestCase):
                 "x",
                 "--repository-name",
                 "x",
-                "--pr-id",
-                "1",
-                "--text",
+                "--root-organisation",
+                "x",
+                "--root-repository-name",
                 "x",
                 "--verbose",
                 "y",
@@ -298,14 +211,14 @@ class CliParserTest(unittest.TestCase):
         self.assertEqual("", stdout)
         last_stderr_line = stderr.splitlines()[-1]
         self.assertEqual(
-            "bdop-cli add-pr-comment: error: argument --git-provider: invalid git provider value: 'INVALID_PROVIDER'",
+            "bdop-cli sync-apps: error: argument --git-provider: invalid git provider value: 'INVALID_PROVIDER'",
             last_stderr_line,
         )
 
     def test_missing_git_provider_and_url(self):
         exit_code, stdout, stderr = self._capture_parse_args(
             [
-                "add-pr-comment",
+                "sync-apps",
                 "--username",
                 "x",
                 "--password",
@@ -314,9 +227,9 @@ class CliParserTest(unittest.TestCase):
                 "x",
                 "--repository-name",
                 "x",
-                "--pr-id",
-                "1",
-                "--text",
+                "--root-organisation",
+                "x",
+                "--root-repository-name",
                 "x",
                 "--verbose",
                 "y",
@@ -332,7 +245,7 @@ class CliParserTest(unittest.TestCase):
     def test_failed_git_provider_deduction_from_url(self):
         exit_code, stdout, stderr = self._capture_parse_args(
             [
-                "add-pr-comment",
+                "sync-apps",
                 "--git-provider-url",
                 "http://some-unknown-url.com/",
                 "--username",
@@ -343,9 +256,9 @@ class CliParserTest(unittest.TestCase):
                 "x",
                 "--repository-name",
                 "x",
-                "--pr-id",
-                "1",
-                "--text",
+                "--root-organisation",
+                "x",
+                "--root-repository-name",
                 "x",
                 "--verbose",
                 "y",

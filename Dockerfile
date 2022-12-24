@@ -28,20 +28,6 @@ RUN pip install .
 RUN make checks
 
 # =========
-FROM dev AS docs
-
-COPY requirements-docs.txt .
-RUN pip install -r requirements-docs.txt
-COPY docs ./docs
-COPY CONTRIBUTING.md mkdocs.yml ./
-RUN mkdocs build
-
-# =========
-FROM scratch AS docs-site
-
-COPY --from=docs /workdir/site /site
-
-# =========
 FROM deps AS install
 
 COPY . .
